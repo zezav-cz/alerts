@@ -1,0 +1,8 @@
+version: "2"
+
+linters:
+  exclusions:
+    # Unchecked errors from Close, Remove and printing are the idiom in
+    # deferred cleanup and CLI output, not bugs.
+    presets:
+      - std-error-handling
