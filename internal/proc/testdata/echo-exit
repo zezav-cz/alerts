@@ -1,0 +1,6 @@
+#!/bin/sh
+# Usage: echo-exit CODE [STDOUT [STDERR]]
+# Prints STDOUT and STDERR when given, then exits with CODE.
+if [ -n "${2-}" ]; then printf '%s\n' "$2"; fi
+if [ -n "${3-}" ]; then printf '%s\n' "$3" >&2; fi
+exit "$1"

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Usage: fork-and-wait PIDFILE
+# Forks a grandchild that inherits stdout, records its pid, and waits for it,
+# so a timeout that only killed this shell would leave Run waiting.
+sleep 30 &
+echo "$!" > "$1"
+wait

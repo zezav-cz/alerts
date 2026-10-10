@@ -1,0 +1,4 @@
+#!/bin/sh
+# Echoes its stdin and its environment, so tests can see what Run passed.
+printf 'stdin=%s\n' "$(cat)"
+env
