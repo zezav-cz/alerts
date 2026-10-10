@@ -72,6 +72,7 @@ type Daemon struct {
 	stopWork context.CancelFunc
 
 	heartbeatURL string
+	nextBeat     time.Time
 	lastWatchdog time.Time
 }
 
@@ -384,6 +385,3 @@ func (d *Daemon) notify(s string) {
 		d.log.Warn("sd_notify failed", "state", s, "err", err)
 	}
 }
-
-// heartbeat is replaced by heartbeat.go in the next task.
-func (d *Daemon) heartbeat(time.Time) {}
