@@ -74,6 +74,49 @@ func TestRunTimeoutKillsTheWholeGroup(t *testing.T) {
 	}
 }
 
+func TestRunCapsCapturedOutput(t *testing.T) {
+	out, err := Run(context.Background(), []string{"testdata/flood"}, nil, nil, 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Stdout) != MaxCapture {
+		t.Errorf("captured %d bytes of stdout, want the first %d", len(out.Stdout), MaxCapture)
+	}
+	if got := FirstLine(out.Stdout); got != "first line" {
+		t.Errorf("first line %q", got)
+	}
+}
+
+func TestRunReapsWhatACommandLeavesBehind(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	start := time.Now()
+	out, err := Run(context.Background(), []string{"testdata/background", pidFile}, nil, nil, 10*time.Second)
+	if err != nil {
+		t.Fatalf("err = %v; a command that exited 0 must count as success", err)
+	}
+	if got := FirstLine(out.Stdout); got != "OK - fine" {
+		t.Errorf("first line %q", got)
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("Run took %s waiting for the leftover child", took)
+	}
+	b, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for syscall.Kill(pid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatalf("leftover child %d still alive", pid)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func TestReason(t *testing.T) {
 	_, err := Run(context.Background(), []string{"/nonexistent/check"}, nil, nil, time.Second)
 	if got := Reason(err); got != "no such file or directory" {

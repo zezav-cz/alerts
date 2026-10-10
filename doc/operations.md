@@ -80,7 +80,7 @@ Durations are Go durations (`30s`, `5m`, `6h`). Every check must be routable in 
 
 ## Writing a check
 
-Any executable works if it prints one line and exits 0 (OK), 1 (WARNING), 2 (CRITICAL) or 3 (UNKNOWN). Text after the first `|` is performance data and is dropped. Another exit code, a crash or a timeout is UNKNOWN, which alerts too. Try it as the daemon would run it:
+Any executable works if it prints one line and exits 0 (OK), 1 (WARNING), 2 (CRITICAL) or 3 (UNKNOWN). Text after the first `|` is performance data and is dropped. Another exit code, a crash or a timeout is UNKNOWN, which alerts too. Anything the check leaves running in its process group is killed when it exits, and only the first 64 KiB of its output is read. Try it as the daemon would run it:
 
 ```sh
 sudo -u alerts env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin LANG=C /path/to/check; echo $?

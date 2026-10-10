@@ -1,0 +1,5 @@
+#!/bin/sh
+# Prints a first line and then about 10 MB more, and exits 0: the capture must
+# keep a bounded prefix, not buffer all of it.
+echo "first line"
+dd if=/dev/zero bs=1048576 count=10 2>/dev/null | tr '\0' 'x'

@@ -145,6 +145,8 @@ Decoding is strict: an unknown key anywhere is an error. On top of that, `valida
 | Command cannot be started | UNKNOWN | `cannot run <command>: <error>` |
 | Timeout | UNKNOWN | `timed out after <timeout>`; the whole process group is killed |
 
+When the command exits, anything it left running in its process group is killed as well, so a plugin that forks a background helper neither leaks it nor holds the run open. Only the first 64 KiB of each of stdout and stderr is kept; the rest is read and discarded, so a check that floods its output cannot exhaust memory on the Pi.
+
 The output line has any performance data (from the first `|` on) removed, is trimmed, and is cut to 500 characters. If stdout has no non-blank line, the first non-blank line of stderr is used instead; if neither has one, the output is `(no output)`.
 
 ## Policy
