@@ -87,6 +87,16 @@ sudo -u alerts env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sb
 sudo -u alerts alerts run <check-name>
 ```
 
+## Running the checks on demand
+
+```sh
+sudo -u alerts alerts run              # every check, worst first, with a summary
+sudo -u alerts alerts run disk load    # only these
+sudo -u alerts alerts run -v           # plus each check's command, exit code and raw output
+```
+
+Each check runs as the daemon would run it (same environment and timeout), all in parallel. Nothing is sent and nothing is saved, so it is safe next to the running daemon. With a single check it also says what the daemon's policy would do with the result. The exit code is the worst state, so it can drive a script.
+
 ## Exec notifier contract
 
 The command gets the alert as one JSON object on stdin, then stdin is closed. Exit 0 within `timeout` means delivered; anything else is retried with backoff (10 s doubling to 10 min) for up to 24 h. The first line of stderr is logged.
