@@ -1,0 +1,3 @@
+#!/bin/sh
+# A notifier that never finishes.
+sleep 30

@@ -1,0 +1,4 @@
+#!/bin/sh
+# A notifier whose channel is down.
+echo "no route to ntfy.sh" >&2
+exit 1

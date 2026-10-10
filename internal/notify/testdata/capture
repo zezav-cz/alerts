@@ -1,0 +1,4 @@
+#!/bin/sh
+# Saves the alert from stdin and the environment into $CAPTURE_DIR.
+cat > "$CAPTURE_DIR/stdin.json"
+env > "$CAPTURE_DIR/env"
