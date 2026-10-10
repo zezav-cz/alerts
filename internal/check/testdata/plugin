@@ -1,0 +1,6 @@
+#!/bin/sh
+# Usage: plugin CODE [STDOUT [STDERR]]
+# A stand-in monitoring plugin: prints the given lines and exits with CODE.
+if [ -n "${2-}" ]; then printf '%s\n' "$2"; fi
+if [ -n "${3-}" ]; then printf '%s\n' "$3" >&2; fi
+exit "$1"

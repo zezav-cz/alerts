@@ -1,0 +1,3 @@
+#!/bin/sh
+# A plugin that never answers in time.
+sleep 30
