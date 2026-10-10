@@ -12,7 +12,7 @@ checks ──► result ──► policy ──► alert ──► routing ─�
 
 **Policy** (`internal/policy`) is a pure function, `Evaluate(previous state, result, now, settings) -> (new state, alert or nil)`. A check's confirmed state changes only after `confirm` consecutive results that differ from it, in both directions, so a flapping check is quiet and a recovery is as trustworthy as a problem. A confirmed change into a non-OK state is a `problem` alert, back to OK a `recovery`; while a problem persists and results agree with it, a `reminder` goes out every `repeat`. Because nothing in the policy touches the clock or the disk, all of that is tested with plain tables.
 
-**Notifiers** (`internal/notify`) deliver an `Alert`. `Telegram` posts the alert's ready-made text to the Bot API; `Exec` hands the alert as JSON on stdin to any command, which is how a new channel is added without a rebuild. `Route` picks the notifiers for an alert: the union of every matching route. A recovery is routed by the state it recovered from, so it reaches whoever got the problem.
+**Notifiers** (`internal/notify`) deliver an `Alert`. `Telegram` posts the alert's ready-made text to the Bot API; `Exec` hands the alert as JSON on stdin to any command, which is how a new channel is added without a rebuild. `Route` picks the notifiers for an alert: the union of every matching route. A recovery is routed by the state it recovered from, so it reaches whoever got the problem, and a change between two problem states is routed by both, so a CRITICAL-only channel hears when CRITICAL drops to WARNING.
 
 ## The core loop
 

@@ -192,6 +192,7 @@ func TestRoute(t *testing.T) {
 		{"warning", alert.NewProblem("z01", "disk", check.OK, check.Warning, "", t0), []string{"telegram"}},
 		{"critical deduplicates", alert.NewProblem("z01", "disk", check.OK, check.Critical, "", t0), []string{"telegram", "phone"}},
 		{"recovery follows the problem", alert.NewRecovery("z01", "disk", check.Critical, t0, "", t0), []string{"telegram", "phone"}},
+		{"de-escalation reaches whoever got the higher state", alert.NewProblem("z01", "disk", check.Critical, check.Warning, "", t0), []string{"telegram", "phone"}},
 		{"check matcher", alert.NewProblem("rpi01", "throttle", check.OK, check.Warning, "", t0), []string{"telegram", "parents"}},
 	}
 	for _, tc := range cases {

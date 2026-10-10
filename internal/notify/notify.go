@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/zezav-cz/alerts/internal/alert"
+	"github.com/zezav-cz/alerts/internal/check"
 	"github.com/zezav-cz/alerts/internal/config"
 )
 
@@ -61,12 +62,17 @@ func Build(c config.Notifier, client *http.Client) (Notifier, error) {
 }
 
 // Route returns the notifiers an alert goes to: the union of every matching
-// route, in order of first appearance.
+// route, in order of first appearance. A problem that moves between two
+// non-OK states is routed by both, so whoever was told about the higher
+// state also hears that it ended.
 func Route(routes []config.Route, a alert.Alert) []string {
+	states := []check.State{a.RouteState()}
+	if a.Kind == alert.Problem && a.PreviousState != check.OK {
+		states = append(states, a.PreviousState)
+	}
 	var names []string
-	s := a.RouteState()
 	for _, r := range routes {
-		if !r.Matches(a.Check, s) {
+		if !slices.ContainsFunc(states, func(s check.State) bool { return r.Matches(a.Check, s) }) {
 			continue
 		}
 		for _, n := range r.Notify {

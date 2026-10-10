@@ -170,7 +170,7 @@ Confirmation applies in both directions, so a recovery needs `confirm` OK result
 
 ### Routing
 
-An alert goes to the union of the notifiers of every matching route. A route matches when each matcher it has matches; an absent matcher matches anything. The state used for matching is the alert's state for `problem` and `reminder`, and the state recovered **from** for `recovery`, so the "OK again" reaches the same notifiers as the problem did.
+An alert goes to the union of the notifiers of every matching route. A route matches when each matcher it has matches; an absent matcher matches anything. The state used for matching is the alert's state for `problem` and `reminder`, and the state recovered **from** for `recovery`, so the "OK again" reaches the same notifiers as the problem did. A `problem` that moves between two non-OK states (CRITICAL → WARNING) is matched by both states, so a notifier that only receives CRITICAL still learns the CRITICAL ended instead of being left on it.
 
 ## Alerts and messages
 
