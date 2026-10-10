@@ -1,6 +1,6 @@
 # alerts — v1 design
 
-**Status:** Approved
+**Status:** Implemented in v1
 **Date:** 2026-10-10
 
 ## Context
