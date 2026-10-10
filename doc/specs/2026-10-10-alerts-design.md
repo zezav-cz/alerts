@@ -1,6 +1,6 @@
 # alerts — v1 design
 
-**Status:** Draft, awaiting review
+**Status:** Approved
 **Date:** 2026-10-10
 
 ## Context
@@ -71,7 +71,7 @@ All take `--config PATH` (default `/etc/alerts/config.yaml`). `alerts --version`
 
 | Command | Behaviour |
 |---|---|
-| `alerts daemon` | The service mode, run by systemd. |
+| `alerts daemon` | The service mode, run by systemd. `--debug` additionally logs every check result. |
 | `alerts validate` | Static validation of the config only — no files read beyond the config, nothing executed. Used by Puppet as `validate_cmd`. Exit 0 if valid, 1 with the errors listed otherwise. |
 | `alerts run <check>` | Runs one check once and prints its state, output and duration, plus what the policy would do given the current state file. Read-only: it never writes state or sends anything. |
 | `alerts test-notify <notifier>` | Sends a test alert (kind `test`) through one notifier, directly, with no retries. Exit status reflects delivery. |
@@ -128,10 +128,11 @@ Decoding is strict: an unknown key anywhere is an error. On top of that, `valida
 - A notifier with a `type` other than `telegram` or `exec`; a `telegram` notifier without `token_file` or `chat_id`; an `exec` notifier without `command`.
 - A `chat_id` that is not a YAML string — an unquoted `-100123456` is rejected with a message to quote it.
 - Durations that do not parse with Go's `time.ParseDuration`, or that are not positive (`repeat` may be `0`); `confirm` below 1.
+- A config without any check — an empty or mistyped Hiera key must not install a config that silently monitors nothing.
 - A route whose `notify` is empty or names an unknown notifier, whose `checks` names an unknown check, or whose `states` contains anything other than `WARNING`, `CRITICAL`, `UNKNOWN`.
 - **Unrouted combinations:** every pair (check, state) for each check and each of `WARNING`, `CRITICAL`, `UNKNOWN` must match at least one route. This guarantees no alert can be routed nowhere.
 
-`alerts daemon` runs the same validation and additionally fails at start-up if a `token_file` or `heartbeat.url_file` cannot be read. Missing check commands are not fatal; they surface as UNKNOWN results, which alert.
+`alerts daemon` runs the same validation and additionally fails at start-up if a `token_file` or `heartbeat.url_file` cannot be read, or if the state file cannot be written. Missing check commands are not fatal; they surface as UNKNOWN results, which alert.
 
 ## Checks
 
@@ -139,12 +140,12 @@ Decoding is strict: an unknown key anywhere is an error. On top of that, `valida
 
 | Outcome | State | Output |
 |---|---|---|
-| Exit 0 / 1 / 2 / 3 | OK / WARNING / CRITICAL / UNKNOWN | First line of stdout |
+| Exit 0 / 1 / 2 / 3 | OK / WARNING / CRITICAL / UNKNOWN | First non-blank line of stdout |
 | Any other exit code | UNKNOWN | `exit status N: <first line>` |
 | Command cannot be started | UNKNOWN | `cannot run <command>: <error>` |
 | Timeout | UNKNOWN | `timed out after <timeout>`; the whole process group is killed |
 
-The output line has any performance data (from the first `|` on) removed, is trimmed, and is cut to 500 characters. If stdout is empty, the first line of stderr is used instead.
+The output line has any performance data (from the first `|` on) removed, is trimmed, and is cut to 500 characters. If stdout has no non-blank line, the first non-blank line of stderr is used instead; if neither has one, the output is `(no output)`.
 
 ## Policy
 
@@ -156,7 +157,7 @@ Per check the state records: the confirmed state, when it was entered (`since`),
 
 1. If the result's state equals the confirmed state, the pending counter resets to 0.
 2. Otherwise the counter increments. When it reaches `confirm`, the confirmed state becomes the result's state, `since` becomes now, the counter resets, and an alert is emitted: kind `recovery` if the new state is OK, kind `problem` otherwise (this covers OK→problem as well as WARNING↔CRITICAL↔UNKNOWN changes).
-3. If no alert was emitted, the confirmed state is not OK, `repeat` is not 0, and the last alert for the check is at least `repeat` old, a `reminder` alert is emitted. Reminders are therefore evaluated whenever a result arrives, so their precision is the check's interval.
+3. If the result agrees with the confirmed state (step 1), the confirmed state is not OK, `repeat` is not 0, and the last alert for the check is at least `repeat` old, a `reminder` alert is emitted. Reminders are therefore evaluated whenever a result arrives, so their precision is the check's interval, and none goes out while a recovery is being confirmed.
 
 Confirmation applies in both directions, so a recovery needs `confirm` OK results just as a problem needs `confirm` non-OK ones; a check flapping on single results produces no alerts. While the counter is above 0 the check is scheduled at `retry_interval` instead of `interval`. With `confirm: 1` every change alerts immediately.
 
@@ -230,7 +231,7 @@ Runs `command` directly with the minimal environment plus the notifier's `env` m
 ### Delivery
 
 - Each notifier has its own FIFO queue, persisted in the state file; order within a notifier is preserved, so a recovery never overtakes its problem.
-- The worker retries the head of its queue with backoff starting at 10 s, doubling, capped at 10 min (or Telegram's `retry_after`, if longer).
+- The worker retries the head of its queue with backoff starting at 10 s, doubling, capped at 10 min (or Telegram's `retry_after`, if longer, but never more than 1 h). A persisted retry time more than 1 h in the future means the wall clock stepped back since it was set — rpi01 has no RTC — and is treated as due.
 - An alert still undelivered 24 h after it was enqueued is dropped and logged at error level.
 - Each failure is logged at warning level; delivery after earlier failures is logged at info level.
 
