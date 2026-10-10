@@ -1,0 +1,22 @@
+name: Release
+"on":
+  push:
+    tags: ["v*"]
+
+# Writes the GitHub Release, nothing else.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+      - run: nix flake check
+      - run: nix develop -c just test
+      - run: nix develop -c just release-build "$GITHUB_REF_NAME"
+      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes dist/*
+        env:
+          GH_TOKEN: ${{ github.token }}
