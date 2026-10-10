@@ -71,6 +71,7 @@ routes:                       # an alert goes to every matching route's notifier
 
 checks:
   - name: disk                # [a-z0-9][a-z0-9_-]*, unique
+    type: exec                # optional; exec is the only type in v1
     command: [/usr/lib/nagios/plugins/check_disk, -w, 15%, -c, 10%, -p, /]
     interval: 5m              # any key from defaults can be overridden here
 ```
