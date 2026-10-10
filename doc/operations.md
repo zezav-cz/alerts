@@ -4,7 +4,7 @@
 
 `repo/bolt` installs `alerts` on each host; this is what it has to provide.
 
-- The binary from the GitHub Release matching the host (`alerts_linux_amd64` or `alerts_linux_arm64`), verified against `SHA256SUMS`, at `/usr/local/bin/alerts`.
+- The binary from the GitHub Release matching the host, `https://github.com/zezav-cz/alerts/releases/download/<tag>/alerts_linux_amd64` (z01) or `.../alerts_linux_arm64` (rpi01), verified against the checksum from that release's `SHA256SUMS`, at `/usr/local/bin/alerts`.
 - A system user and group `alerts`. On the Raspberry Pi add it to the `video` group, so `vcgencmd` works for the throttling check. A check that ever needs root gets a narrow sudoers rule, not root for the daemon.
 - `/etc/alerts/config.yaml`, mode 0644, written with `validate_cmd => '/usr/local/bin/alerts --config % validate'`.
 - Secret files, mode 0640 `root:alerts`: `/etc/alerts/telegram-token` (the bot token alone) and `/etc/alerts/heartbeat-url` (the healthchecks.io ping URL alone).
@@ -121,4 +121,4 @@ A notifier that only wants to send something sends `text`.
 
 ## Releasing a new version
 
-Tag `vX.Y.Z` on `main` and push the tag; the release workflow does the rest. Then update the version and both checksums in `repo/bolt`'s Hiera and apply.
+Tag `vX.Y.Z` on `main` (or `vX.Y.Z-rc.N` for a pre-release to try first) and push the tag; the release workflow does the rest — `doc/development.md`, "Releasing". Then update the version and both checksums in `repo/bolt`'s Hiera and apply.

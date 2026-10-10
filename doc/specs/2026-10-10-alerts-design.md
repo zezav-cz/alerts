@@ -290,10 +290,10 @@ Following the Zezav conventions:
 
 ## Releases
 
-1. A tag `vX.Y.Z` is pushed.
-2. A GitHub Actions workflow runs `nix flake check`, then `nix develop -c just release-build`.
-3. `scripts/release-build` builds `CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=vX.Y.Z"` for linux/amd64 and linux/arm64 as `alerts_linux_amd64` and `alerts_linux_arm64`, and writes `SHA256SUMS`.
-4. The workflow creates the GitHub Release and uploads the three files.
+1. A tag `vX.Y.Z` is pushed; a tag with a suffix (`vX.Y.Z-rc.N`) makes a pre-release.
+2. A GitHub Actions workflow runs `nix flake check` — hooks, the test suite inside the build sandbox, and the release build — and the race-enabled tests in the devshell.
+3. It builds the flake output `.#release` with the tag as `ALERTS_VERSION`: `CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=vX.Y.Z"` for linux/amd64 and linux/arm64 as `alerts_linux_amd64` and `alerts_linux_arm64`, plus `SHA256SUMS`. The derivation is reproducible.
+4. The workflow checks the binary reports the tag, creates the GitHub Release and uploads the three files.
 
 `repo/bolt` then pins the version and the per-architecture checksum in Hiera. Creating the `zezav-cz/alerts` repository on GitHub is a separate step taken with Jan's confirmation.
 

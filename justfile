@@ -6,7 +6,7 @@ _default:
 fmt:
     pre-commit run --all-files
 
-# Verify without modifying anything — same hooks, sandboxed.
+# Verify without modifying anything: hooks, sandboxed tests, release build.
 lint:
     nix flake check
 
@@ -21,6 +21,6 @@ build:
 # lint + test.
 ci: lint test
 
-# Build the release binaries and SHA256SUMS for VERSION into dist/.
+# Build the release artifacts for VERSION (e.g. v0.1.0) into dist/, as CI does.
 release-build version:
-    scripts/release-build {{version}}
+    ALERTS_VERSION={{version}} nix build --impure .#release -o dist

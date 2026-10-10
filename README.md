@@ -25,11 +25,11 @@ just build
 |---|---|
 | `just` | List every recipe |
 | `just fmt` | Repair formatting across the working tree (pre-commit hooks) |
-| `just lint` | Verify without modifying anything (`nix flake check`) |
+| `just lint` | Verify without modifying anything (`nix flake check`: hooks, the test suite in the sandbox, the release build) |
 | `just test` | Run the test suite with the race detector |
 | `just build` | Build a static binary for this machine into `bin/` |
 | `just ci` | `lint` + `test` |
-| `just release-build vX.Y.Z` | Build the release binaries and `SHA256SUMS` into `dist/` |
+| `just release-build vX.Y.Z` | Build the release binaries and `SHA256SUMS` into `dist/` with Nix, exactly as the release workflow does |
 
 ## Project structure
 
@@ -44,7 +44,7 @@ internal/state/    the persisted state file
 internal/notify/   notifiers (telegram, exec) and routing
 internal/sdnotify/ systemd notify protocol
 internal/daemon/   the core loop, delivery queues, heartbeat
-scripts/           release build
+.github/workflows/ CI (nix flake check, race tests) and tag-driven releases
 doc/               architecture, development, operations, decisions, specs, plans
 vendor/            the vendored YAML library (the sandboxed hooks build offline)
 ```

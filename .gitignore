@@ -2,4 +2,4 @@
 /result
 /.pre-commit-config.yaml
 /bin/
-/dist/
+/dist

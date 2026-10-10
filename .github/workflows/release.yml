@@ -16,7 +16,16 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@v15
       - run: nix flake check
       - run: nix develop -c just test
-      - run: nix develop -c just release-build "$GITHUB_REF_NAME"
-      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes dist/*
+      - name: Build the release artifacts
+        run: ALERTS_VERSION="$GITHUB_REF_NAME" nix build --impure .#release -o dist
+      - name: Check the binary reports the tag
+        run: test "$(./dist/alerts_linux_amd64 --version)" = "$GITHUB_REF_NAME"
+      # A tag with a suffix (v0.2.0-rc.1) is a pre-release.
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          if [[ $GITHUB_REF_NAME == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" \
+            --generate-notes "${flags[@]}" dist/alerts_linux_amd64 dist/alerts_linux_arm64 dist/SHA256SUMS

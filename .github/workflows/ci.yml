@@ -1,5 +1,8 @@
 name: CI
-"on": [push, pull_request]
+"on":
+  push:
+    branches: [main]
+  pull_request:
 
 permissions:
   contents: read
@@ -14,13 +17,15 @@ jobs:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
       - uses: DeterminateSystems/magic-nix-cache-action@v15
+      # Hooks, the test suite in the sandbox, and the release build.
       - run: nix flake check
 
-  test:
-    name: go test
+  race:
+    name: go test -race
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
       - uses: DeterminateSystems/magic-nix-cache-action@v15
+      # The sandboxed build is static (no cgo), so the race detector runs here.
       - run: nix develop -c just test
