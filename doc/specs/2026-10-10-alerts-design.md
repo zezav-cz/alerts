@@ -73,7 +73,7 @@ All take `--config PATH` (default `/etc/alerts/config.yaml`). `alerts --version`
 |---|---|
 | `alerts daemon` | The service mode, run by systemd. `--debug` additionally logs every check result. |
 | `alerts validate` | Static validation of the config only — no files read beyond the config, nothing executed. Used by Puppet as `validate_cmd`. Exit 0 if valid, 1 with the errors listed otherwise. |
-| `alerts run <check>` | Runs one check once and prints its state, output and duration, plus what the policy would do given the current state file. Read-only: it never writes state or sends anything. |
+| `alerts run [-v] [check...]` | Runs every check, or the named ones, once and in parallel, exactly as the daemon would, and prints one line each (state, name, output, duration), worst first, then a summary; `-v` adds each check's command, exit code and full stdout/stderr. With a single check it also prints what the policy would do given the current state file. Read-only: it never writes state or sends anything. Exits with the worst state (0 OK, 1 WARNING, 2 CRITICAL, 3 UNKNOWN). |
 | `alerts test-notify <notifier>` | Sends a test alert (kind `test`) through one notifier, directly, with no retries. Exit status reflects delivery. |
 
 ## Configuration

@@ -12,11 +12,15 @@ import (
 	"github.com/zezav-cz/alerts/internal/proc"
 )
 
-// Result is one run of a check.
+// Result is one run of a check. Exit, Stdout and Stderr are the raw run,
+// for `alerts run -v`; the daemon only uses State and Output.
 type Result struct {
 	State    State
 	Output   string
 	Duration time.Duration
+	Exit     int // -1 when the command never ran or was killed
+	Stdout   string
+	Stderr   string
 }
 
 // Checker runs a check once. Every problem, including the check being unable
@@ -42,14 +46,20 @@ func (e Exec) Check(ctx context.Context) Result {
 	}
 	start := time.Now()
 	out, err := proc.Run(ctx, e.Command, nil, nil, e.Timeout)
-	res := Result{Duration: time.Since(start)}
+	res := Result{Duration: time.Since(start), Exit: -1, Stdout: string(out.Stdout), Stderr: string(out.Stderr)}
+	var exitErr *exec.ExitError
+	switch {
+	case err == nil:
+		res.Exit = 0
+	case errors.As(err, &exitErr):
+		res.Exit = exitErr.ExitCode()
+	}
 
 	line := clean(proc.FirstLine(out.Stdout))
 	if line == "" {
 		line = clean(proc.FirstLine(out.Stderr))
 	}
 
-	var exitErr *exec.ExitError
 	switch {
 	case out.TimedOut:
 		res.State, res.Output = Unknown, fmt.Sprintf("timed out after %s", e.Timeout)

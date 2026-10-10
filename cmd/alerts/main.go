@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -33,7 +35,11 @@ const usage = `usage: alerts [flags] <command> [argument]
 commands:
   daemon                  run checks and deliver alerts (the systemd service)
   validate                check the config and exit
-  run <check>             run one check and show what the policy would do
+  run [-v] [check...]     run every check (or the named ones) now and print
+                          the results, worst first; nothing is sent or saved.
+                          -v adds each check's command and raw output. With
+                          one check, also what the policy would do. Exits
+                          with the worst state (0 OK ... 2 CRITICAL, 3 UNKNOWN)
   test-notify <notifier>  send a test alert through one notifier
 
 flags:
@@ -61,14 +67,26 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	argc := map[string]int{"daemon": 0, "validate": 0, "run": 1, "test-notify": 1}
+	argc := map[string]int{"daemon": 0, "validate": 0, "run": -1, "test-notify": 1} // -1: any
 	rest := fs.Args()
 	if len(rest) == 0 {
 		fs.Usage()
 		return 2
 	}
 	cmd, cmdArgs := rest[0], rest[1:]
-	if n, ok := argc[cmd]; !ok || len(cmdArgs) != n {
+	verbose := false
+	if cmd == "run" {
+		runFlags := flag.NewFlagSet("alerts run", flag.ContinueOnError)
+		runFlags.SetOutput(stderr)
+		runFlags.Usage = func() { fmt.Fprint(stderr, usage) }
+		runFlags.BoolVar(&verbose, "v", false, "")
+		runFlags.BoolVar(&verbose, "verbose", false, "")
+		if err := runFlags.Parse(cmdArgs); err != nil {
+			return 2
+		}
+		cmdArgs = runFlags.Args()
+	}
+	if n, ok := argc[cmd]; !ok || (n >= 0 && len(cmdArgs) != n) {
 		fmt.Fprintf(stderr, "alerts: bad command line: %s\n\n", strings.Join(rest, " "))
 		fs.Usage()
 		return 2
@@ -84,7 +102,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "config OK: %d checks, %d notifiers, %d routes\n", len(cfg.Checks), len(cfg.Notifiers), len(cfg.Routes))
 		return 0
 	case "run":
-		return runCheck(cfg, cmdArgs[0], stdout, stderr)
+		return runChecks(cfg, cmdArgs, verbose, stdout, stderr)
 	case "test-notify":
 		return testNotify(cfg, cmdArgs[0], stdout, stderr)
 	default:
@@ -92,29 +110,134 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-// runCheck runs one check and reports what the policy would do with the
-// result, without writing state or sending anything.
-func runCheck(cfg *config.Config, name string, stdout, stderr io.Writer) int {
-	i := slices.IndexFunc(cfg.Checks, func(c config.Check) bool { return c.Name == name })
-	if i < 0 {
-		fmt.Fprintf(stderr, "alerts: no check named %q\n", name)
-		return 1
-	}
-	c := cfg.Checks[i]
-	res := check.Exec{Command: c.Command, Timeout: c.Timeout}.Check(context.Background())
-	fmt.Fprintf(stdout, "%s: %s (%s)\n", res.State, res.Output, res.Duration.Round(time.Millisecond))
+// severity orders states for display and for the exit code: a check that
+// cannot run is worse than a warning, a critical worse than both.
+var severity = map[check.State]int{check.OK: 0, check.Warning: 1, check.Unknown: 2, check.Critical: 3}
 
+// runChecks runs the named checks, or every check when names is empty, all
+// at once and exactly as the daemon would, and prints the results worst
+// first. It never sends anything and never writes state. It returns the
+// worst state, so a script can act on it.
+func runChecks(cfg *config.Config, names []string, verbose bool, stdout, stderr io.Writer) int {
+	selected := cfg.Checks
+	if len(names) > 0 {
+		selected = nil
+		for _, name := range names {
+			i := slices.IndexFunc(cfg.Checks, func(c config.Check) bool { return c.Name == name })
+			if i < 0 {
+				fmt.Fprintf(stderr, "alerts: no check named %q\n", name)
+				return 1
+			}
+			selected = append(selected, cfg.Checks[i])
+		}
+	}
+
+	results := make([]check.Result, len(selected))
+	var wg sync.WaitGroup
+	for i, c := range selected {
+		wg.Go(func() { results[i] = check.Exec{Command: c.Command, Timeout: c.Timeout}.Check(context.Background()) })
+	}
+	wg.Wait()
+
+	order := make([]int, len(selected))
+	width := 0
+	for i, c := range selected {
+		order[i] = i
+		width = max(width, len(c.Name))
+	}
+	slices.SortStableFunc(order, func(a, b int) int {
+		if d := severity[results[b].State] - severity[results[a].State]; d != 0 {
+			return d
+		}
+		return strings.Compare(selected[a].Name, selected[b].Name)
+	})
+
+	counts := map[check.State]int{}
+	worst := check.OK
+	for _, i := range order {
+		c, r := selected[i], results[i]
+		counts[r.State]++
+		if severity[r.State] > severity[worst] {
+			worst = r.State
+		}
+		fmt.Fprintf(stdout, "%-8s  %-*s  %s  (%s)\n", r.State, width, c.Name, r.Output, r.Duration.Round(time.Millisecond))
+		if verbose {
+			printRaw(stdout, c, r)
+		}
+	}
+	fmt.Fprintln(stdout, summary(len(selected), counts))
+
+	if len(selected) == 1 {
+		explainPolicy(cfg, selected[0], results[0], stdout, stderr)
+	}
+	return int(worst)
+}
+
+// printRaw shows how a check ran: the command as a shell would take it, its
+// exit code, and everything it printed.
+func printRaw(w io.Writer, c config.Check, r check.Result) {
+	fmt.Fprintf(w, "  command  %s\n", shellJoin(c.Command))
+	fmt.Fprintf(w, "  exit     %d\n", r.Exit)
+	for _, stream := range []struct{ label, text string }{{"stdout", r.Stdout}, {"stderr", r.Stderr}} {
+		lines := strings.Split(strings.TrimRight(stream.text, "\n"), "\n")
+		if stream.text == "" {
+			lines = []string{"(empty)"}
+		}
+		for i, line := range lines {
+			label := ""
+			if i == 0 {
+				label = stream.label
+			}
+			fmt.Fprintf(w, "  %-6s   %s\n", label, line)
+		}
+	}
+}
+
+// summary is the closing line: "4 checks: 1 critical, 1 unknown, 1 warning, 1 ok".
+func summary(n int, counts map[check.State]int) string {
+	noun := "checks"
+	if n == 1 {
+		noun = "check"
+	}
+	var parts []string
+	for _, s := range []check.State{check.Critical, check.Unknown, check.Warning, check.OK} {
+		if counts[s] > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", counts[s], strings.ToLower(s.String())))
+		}
+	}
+	return fmt.Sprintf("%d %s: %s", n, noun, strings.Join(parts, ", "))
+}
+
+var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
+
+// shellJoin quotes the arguments that need it, so the command can be pasted
+// into a shell to run it by hand.
+func shellJoin(argv []string) string {
+	quoted := make([]string, len(argv))
+	for i, a := range argv {
+		if shellSafe.MatchString(a) {
+			quoted[i] = a
+		} else {
+			quoted[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+		}
+	}
+	return strings.Join(quoted, " ")
+}
+
+// explainPolicy says what the daemon would do with this result, from the
+// saved state, without changing it.
+func explainPolicy(cfg *config.Config, c config.Check, res check.Result, stdout, stderr io.Writer) {
 	st, err := state.Read(cfg.StateFile)
 	if err != nil {
 		fmt.Fprintf(stderr, "alerts: state unreadable, assuming a fresh start: %v\n", err)
 		st = state.New()
 	}
 	now := time.Now()
-	prev, ok := st.Checks[name]
+	prev, ok := st.Checks[c.Name]
 	if !ok {
 		prev = policy.Initial(now)
 	}
-	next, a := policy.Evaluate(cfg.Host, name, prev, res, now, policy.Settings{Confirm: c.Confirm, Repeat: c.Repeat})
+	next, a := policy.Evaluate(cfg.Host, c.Name, prev, res, now, policy.Settings{Confirm: c.Confirm, Repeat: c.Repeat})
 	switch {
 	case a != nil:
 		fmt.Fprintf(stdout, "policy: would send a %s to %s:\n%s\n", a.Kind, strings.Join(notify.Route(cfg.Routes, *a), ", "), a.Text)
@@ -123,7 +246,6 @@ func runCheck(cfg *config.Config, name string, stdout, stderr io.Writer) int {
 	default:
 		fmt.Fprintf(stdout, "policy: confirmed %s, no alert\n", next.Confirmed)
 	}
-	return 0
 }
 
 func testNotify(cfg *config.Config, name string, stdout, stderr io.Writer) int {

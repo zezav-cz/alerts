@@ -37,6 +37,19 @@ func TestExec(t *testing.T) {
 	}
 }
 
+// The raw output is what `alerts run -v` shows: everything the command
+// printed, performance data and stderr included, and how it exited.
+func TestExecKeepsTheRawOutput(t *testing.T) {
+	res := Exec{Command: []string{"testdata/plugin", "2", "DISK 2 | perf=1", "a warning"}, Timeout: 5 * time.Second}.Check(context.Background())
+	if res.Exit != 2 || res.Stdout != "DISK 2 | perf=1\n" || res.Stderr != "a warning\n" {
+		t.Errorf("exit %d, stdout %q, stderr %q", res.Exit, res.Stdout, res.Stderr)
+	}
+	res = Exec{Command: []string{"/nonexistent/check"}, Timeout: time.Second}.Check(context.Background())
+	if res.Exit != -1 {
+		t.Errorf("a command that never ran has exit %d, want -1", res.Exit)
+	}
+}
+
 func TestExecTimeout(t *testing.T) {
 	res := Exec{Command: []string{"testdata/sleep"}, Timeout: 200 * time.Millisecond}.Check(context.Background())
 	if res.State != Unknown || res.Output != "timed out after 200ms" {
